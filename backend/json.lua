@@ -17,10 +17,9 @@ local function open(file)
 	file:close()
 
 	local ok, obj = pcall(json.decode, content)
-	if not ok then
-		return nil
-	end
-	--local obj, pos, err = json.decode(content) -- FIXME: dkjson ne raise pas d'erreur ?!
+	if not ok then return nil end
+
+	--local obj, pos, err = json.dkjson.decode(content) -- FIXME: dkjson ne raise pas d'erreur ?!
 	--if err then return nil end
 
 	return obj
