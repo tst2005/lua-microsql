@@ -4,6 +4,9 @@ local db = require "db"
 
 local function test()
 	local player_db = db.open()
+	player_db.autoflush = false
+	assert(player_db:flush())
+
 	player_db:create('players', { 'age', 'name', date = 2013 })
 
 	assert(player_db:getColumns('players') == 3, "Table created incorrectly")
@@ -48,11 +51,13 @@ local function test()
 		player_db:delete('idTest', function(row) return row.name == 'Mrs Smith' end)
 	end
 
+	assert(player_db:flush()) -- do nothing because no file
 	print(player_db)
 end
 
 local function queryTest()
 	local player_db = db.open('query')
+	player_db.autoflush = false
 
 	player_db:query("CREATE TABLE players (age, name, date default 2013)")
 	assert(player_db:getColumns('players') == 3, "Table created incorrectly")
@@ -84,6 +89,7 @@ local function queryTest()
 	player_db:query("INSERT INTO idTest VALUES ('Mr Bob')")
 
 	player_db:query("DROP TABLE idTest")
+	assert(player_db:flush())
 	print(player_db)
 end
 

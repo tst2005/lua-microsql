@@ -12,7 +12,7 @@ local unpack = table.unpack or unpack
 local db = {}
 
 local function backendsave(self, name)
-	if not self.file then return end
+	if not self.file then return false end
 
 	local backend = assert(self.backend)
 	local save = assert(backend.save)
@@ -25,7 +25,8 @@ local function backendsave(self, name)
 --		savetable(self.file, name, tbl)
 --	end
 
-	return save(self.file, self.data, self.indent)
+	save(self.file, self.data, self.indent)
+	return true
 end
 
 local function backendload(self)
@@ -36,14 +37,17 @@ local function backendload(self)
 end
 
 local function needflush(self, name)
---	local changes = self.changes +1
---	local autoflush = self.autoflush
---	if autoflush==nil or type(autoflush)=="number" and changes >= autoflush then
---		print("autoflush", changes, autoflush)
-		backendsave(self, name)
---		changes = 0
---	end
---	self.changes = changes
+	if self.file then
+		local changes = (self.changes or 0) +1
+		local autoflush = self.autoflush
+		if autoflush==nil or autoflush==true then autoflush = 0 end
+		if type(autoflush)=="number" and changes >= autoflush then
+			--print("autoflush", changes, autoflush)
+			backendsave(self, name)
+			changes = 0
+		end
+		self.changes = changes
+	end
 end
 
 
@@ -70,12 +74,12 @@ local function getIterator(self, name)
 end
 
 local function integrity_check(obj)
-        -- tables integrity check
-        for name, tbl in pairs(obj) do
-                assert(tbl.columns)
-                assert(tbl.defaults)
-                assert(tbl.rows) -- data[tablename].rows[colname][rowid]=value
-        end
+	-- tables integrity check
+	for name, tbl in pairs(obj) do
+		assert(tbl.columns)
+		assert(tbl.defaults)
+		assert(tbl.rows) -- data[tablename].rows[colname][rowid]=value
+	end
 	return obj
 end
 
@@ -90,11 +94,15 @@ local function db_open(file, text, indent)
 
 	if text then
 		self.data = json.decode(text)
+		self.changes = 1 -- the file is open, the db from text is not written
 	elseif file then
 		local got = backendload(self)
 		if got then
 			self.data = integrity_check(got)
+			self.changes = 0 -- do not rewrite the file
 		end
+	else
+		self.changes = 1 -- no file, data is not written
 	end
 
 	setmetatable(self, { __index = db, __tostring = function(self) return json.encode(self.data, { indent = self.indent }) end })
@@ -105,12 +113,17 @@ db.open = db_open -- FIXME allow reopen ? there is no db:close() ; x = db.open(.
 
 -- function db:close() end
 
---function db:flush()
---	if self.changes and self.changes > 0 then
---		backendsave(self, nil)
---		self.changes = 0
---	end
---end
+function db:flush()
+	--print("forced-flush called")
+	if self.file and self.changes and self.changes > 0 then
+		--print("forced-flush=done", self.changes)
+		if not backendsave(self, nil) then
+			return false
+		end
+		self.changes = 0
+	end
+	return true
+end
 
 -- not used ?!
 --[[

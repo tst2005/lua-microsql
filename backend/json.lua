@@ -30,7 +30,7 @@ local function save(file, data, indent)
 	local content = json.encode(data, { indent = indent })
 
 	local file = assert(io.open(file, 'w'))
-	file:write(content)
+	file:write(content.."\n")
 	file:close()
 end
 
