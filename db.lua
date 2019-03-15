@@ -5,9 +5,12 @@ local json = require "lunajson-to-replace-dkjson"
 local Parser = require 'parser'
 
 local default_backend = require "backend.json"
+local default_frontend = require"frontend.sql"
 
 local unpack = table.unpack or unpack
 
+local coroutine = assert(coroutine)
+local wrap, yield = assert(coroutine.wrap), assert(coroutine.yield)
 
 local db = {}
 
@@ -62,13 +65,13 @@ local function iterate(data, name)
 			local value = tbl.rows[j][i]
 			row[column] = value
 		end
-		coroutine.yield(row, i)
+		yield(row, i)
 	end
 end
 
 
 local function getIterator(self, name)
-	return coroutine.wrap(function() iterate(self.data, name) end)
+	return wrap(function() iterate(self.data, name) end)
 	-- local co = coroutine.create(function() iterate(data, name) end)
 	-- return function() local code, i, column, value = coroutine.resume(co) return i, column, value end
 end
@@ -242,7 +245,7 @@ function db:select(name, columns, action)
 
 	end
 
-	return coroutine.wrap(function() for i, v in pairs(results) do coroutine.yield(v, i) end end)
+	return wrap(function() for i, v in pairs(results) do yield(v, i) end end)
 end
 
 -- Same argumetns as where and
@@ -274,7 +277,7 @@ function db:where(name, action)
 		end
 	end
 
-	return coroutine.wrap(function() for i, v in pairs(results) do coroutine.yield(v, i) end end)
+	return wrap(function() for i, v in pairs(results) do yield(v, i) end end)
 end
 
 -- Name - tables name or column name
@@ -330,14 +333,8 @@ function db:exists(name)
 	return self.data[name] ~= nil
 end
 
-function db:query(query)
-	local parser = Parser:init(query)
-
-	local command, args = parser:readNextStatement()
-	while args == nil do
-		command, args = parser:readNextStatement()
-	end
-
+function db:query(sql)
+	local command, args = default_frontend.query(sql)
 	return self[command](self, unpack(args))
 end
 
