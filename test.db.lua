@@ -1,5 +1,3 @@
-require "for.json.use.lunajson"
---if pcall(require, "json") then
 
 local Parser = require 'parser'
 local db = require "db"
@@ -10,8 +8,8 @@ local function test()
 
     assert(player_db:getColumns('players') == 3, "Table created incorrectly")
 
-    player_db:insert('players', { 19, 'Frank'})
-    player_db:insert('players', {21, 'Bob'})
+    player_db:insert('players', { 19, 'Frank' })
+    player_db:insert('players', { 21, 'Bob' })
     player_db:insert('players', { 22, 'Delete Me!' })
     player_db:insert('players', { 20, 'Frank' })
 

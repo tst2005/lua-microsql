@@ -1,7 +1,11 @@
+
+-- lunajson instead of dkjson
 local lunajson = require "lunajson"
-local nullv = nil
+local nullv = {} -- setmetatable({},{__tostring=function() return "json.null" end})
 local json = {
-	encode = function(x, _ignored) return lunajson.encode(x, nullv) end,
+	encode = function(x, _ignored)
+		return lunajson.encode(x, nullv)
+	end,
 	decode = function(x) return lunajson.decode(x, nil, nullv) end,
 	null = nullv,
 }
@@ -11,8 +15,10 @@ local Parser = require 'parser'
 
 local unpack = table.unpack or unpack
 
+
 local db = {}
 
+--[[
 local function createTable(...)
     local tbl
     if type(...) ~= 'table' then
@@ -23,6 +29,7 @@ local function createTable(...)
 
     return tbl
 end
+]]--
 
 local function open(file)
     if not file then return {} end
@@ -38,13 +45,11 @@ local function open(file)
     if err then
         obj = {}
     else
-        -- Converts indexs from strings to ints.
+        -- tables integrity check
         for name, tbl in pairs(obj) do
-            local new = {}
-            for k, v in pairs(obj[name]) do
-                new[tonumber(k) or k] = v
-            end
-            obj[name] = new
+            assert(tbl.columns)
+            assert(tbl.defaults)
+            assert(tbl.rows) -- data[tablename].rows[colname][rowid]=value
         end
     end
 
@@ -60,29 +65,18 @@ local function save(file, data, indent)
     file:close()
 end
 
-local function contains(tbl, id)
-    for i = 1, #tbl do
-        if tbl[tostring(i)] == id then return true end
-    end
-end
-
-local function getUniqueID(tbl)
-    for i = 1, 10000000 do
-        if not contains(tbl, i) then return i end
-    end
-end
-
 -- Iterates over every row in the database
 -- and yields the index and row
 local function iterate(data, name)
-    for i = 1, #data[name][1] do
+    local tbl = data[name]
+    for i = 1, #tbl.rows[1] do
         local row = {}
-	if data[name].columns==nil then
-		print("data["..name.."]="..json.encode(data[name]))
+	if tbl.columns==nil then
+		print("data["..name.."]="..json.encode(tbl))
 	end
-        for j = 1, #data[name].columns do
-            local column = data[name].columns[j]
-            local value = data[name][j][i]
+        for j = 1, #tbl.columns do
+            local column = tbl.columns[j]
+            local value = tbl.rows[j][i]
             row[column] = value
         end
         coroutine.yield(row, i)
@@ -114,21 +108,25 @@ local function db_open(file, text, indent)
 end
 db.open = db_open -- FIXME allow reopen ? there is no db:close() ; x = db.open(...) ; x:close() ; x.open(...) ?
 
+-- not used ?!
+--[[
 function db:setFile(file)
     self.file = file
 end
+]]--
 
 -- Name - tables name
 function db:create(name, columns)
-    self.data[name] = {}
-    self.data[name].columns = {}
-    self.data[name].defaults = {}
-    self.data[name].i = {}
+    local tbl = {}
+    tbl.columns = {}
+    tbl.defaults = {}
+    tbl.rows = {}
+    self.data[name] = tbl
 
     local i = 1
     for k, v in pairs(columns) do
         local field
-        local default = nil --json.null
+        local default = json.null
 
         if type(k) == 'number' then
             field = v
@@ -137,41 +135,54 @@ function db:create(name, columns)
             default = v
         end
 
-        self.data[name].columns[i] = field
-        self.data[name].defaults[i] = default
-        self.data[name].i[i] = {}
+        tbl.columns[i] = field
+        tbl.defaults[i] = default
+        tbl.rows[i] = {}
         i = i + 1
     end
 
     -- for i, field in ipairs(columns) do
-    --     self.data[name].columns[i] = field
-    --     self.data[name][i] = {}
+    --     tbl.columns[i] = field
+    --     tbl.rows[i] = {}
     -- end
 end
 
+
+local function contains(rows, id)
+    for i = 1, #rows do
+        if rows[i] == id then return true end
+    end
+end
+
+local function getUniqueID(rows)
+    for i = 1, 10000000 do
+        if not contains(rows, i) then return i end
+    end
+end
+
 -- Name - tables name
--- ... - Table or strings containing values to be insrted into table
+-- ... - Table or strings containing values to be inserted into table
 --       set id to nil to autoincrement.
 function db:insert(name, row)
-    assert(self.data[name], "Table '" .. name .. "' does not exist")
+    local tbl = assert(self.data[name], "Table '" .. name .. "' does not exist")
 
-    local index = #self.data[name].i[1] + 1
+    local index = #tbl.rows[1] + 1
 
-    for i = 1, #self.data[name].columns do
-        local column = self.data[name].i[i]
+    for i = 1, #tbl.columns do
+        local column = tbl.rows[i]
         local value = row[i]
 
-        if self.data[name].columns[i] == 'rowid' then
+        if tbl.columns[i] == 'rowid' then
             if value == nil then
-                value = getUniqueID(self.data[name].i[i])
+                value = getUniqueID(tbl.rows[i])	-- tbl.rows[colnum] => {[rowid]=value} == rows
             elseif type(value) ~= 'number' then
                 error('rowid must be a number')
-            elseif self.data[name].i[i][value] then
+            elseif tbl.rows[i][value] then
                 error('ID already exists')
             end
         end
 
-        if value == nil then value = self.data[name].defaults[i] end
+        if value == nil then value = tbl.defaults[i] end
         column[index] = value
     end
 
@@ -193,7 +204,6 @@ function db:select(name, columns, action)
 
     local iterator = getIterator(self, name)
     local results = {}
-
 
     for row, i in iterator do
         local passed = false
@@ -223,9 +233,10 @@ end
 -- Set - table containg columns to update and their new values
 function db:update(name, set, action)
     for row, i in self:where(name, action) do
-        for index = 1, #self.data[name].columns do
-            local column = self.data[name].columns[index]
-            if set[column] then self.data[name][index][i] = set[column] end
+        local tbl = self.data[name]
+        for index = 1, #tbl.columns do
+            local column = tbl.columns[index]
+            if set[column] then tbl.rows[index][i] = set[column] end
         end
     end
 
@@ -254,18 +265,17 @@ end
 -- Name - tables name or column name
 -- NewName - Tables new name or table containing columns name with new name.
 function db:rename(name, newName)
-    assert(self.data[name], "Table '" .. name .. "' does not exist")
+    local tbl = assert(self.data[name], "Table '" .. name .. "' does not exist")
 
     if type(newName) == 'string' then
-        local value = self.data[name]
         self.data[name] = nil
-        self.data[newName] = value
+        self.data[newName] = tbl
     else
-        for i = 1, #self.data[name].columns do
-            local column = self.data[name].columns[i]
+        for i = 1, #tbl.columns do
+            local column = tbl.columns[i]
             local value = newName[column]
 
-            if value then self.data[name].columns[i] = value end
+            if value then tbl.columns[i] = value end
         end
     end
 
@@ -281,9 +291,10 @@ end
 function db:delete(name, action)
     assert(type(action) == 'function', "Delete must be passed a function")
 
+    local tbl = self.data[name]
     for row, i in self:where(name, action) do
-        for index = 1, #self.data[name].columns do
-            table.remove(self.data[name][index], i)
+        for index = 1, #tbl.columns do
+            table.remove(tbl.rows[index], i)
         end
     end
 
@@ -295,7 +306,7 @@ function db:getColumns(name)
 end
 
 function db:getRows(name)
-    return #self.data[name][1]
+    return #self.data[name].rows[1]
 end
 
 function db:exists(name)
