@@ -1,6 +1,7 @@
 
 --local json = require 'dkjson'
-local json = require "lunajson-to-replace-dkjson"
+local json = require "replace-dkjson-by.lunajson"
+--local json = require "replace-dkjson-by.cjson"
 
 local unpack = table.unpack or unpack
 
