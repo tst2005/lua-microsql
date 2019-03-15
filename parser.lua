@@ -386,7 +386,7 @@ function Parser:readNextStatement()
 		return
 	end
 
-	error("SQL: Unrecgonized statement '" .. self.currentToken.value .. "'")
+	error("SQL: Unrecognized statement '" .. self.currentToken.value .. "'")
 end
 
 return Parser
