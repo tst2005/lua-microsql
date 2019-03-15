@@ -1,5 +1,6 @@
---local json = require 'dkjson'
-local json = require 'lunajson'
+require "for.json.use.lunajson"
+--if pcall(require, "json") then
+
 local Parser = require 'parser'
 local db = require "db"
 

@@ -1,4 +1,12 @@
-local json = require 'dkjson'
+local lunajson = require "lunajson"
+local nullv = nil
+local json = {
+	encode = function(x, _ignored) return lunajson.encode(x, nullv) end,
+	decode = function(x) return lunajson.decode(x, nil, nullv) end,
+	null = nullv,
+}
+--local json = require 'dkjson'
+
 local Parser = require 'parser'
 
 local unpack = table.unpack or unpack
@@ -23,7 +31,7 @@ local function open(file)
     local file, err = io.open(file)
     if err then return {} end
 
-    local content = file:read('*all')
+    local content = file:read('*a')
     file:close()
 
     local obj, pos, err = json.decode(content)
@@ -54,7 +62,7 @@ end
 
 local function contains(tbl, id)
     for i = 1, #tbl do
-        if tbl[i] == id then return true end
+        if tbl[tostring(i)] == id then return true end
     end
 end
 
@@ -69,6 +77,9 @@ end
 local function iterate(data, name)
     for i = 1, #data[name][1] do
         local row = {}
+	if data[name].columns==nil then
+		print("data["..name.."]="..json.encode(data[name]))
+	end
         for j = 1, #data[name].columns do
             local column = data[name].columns[j]
             local value = data[name][j][i]
@@ -85,7 +96,7 @@ local function getIterator(self, name)
     -- return function() local code, i, column, value = coroutine.resume(co) return i, column, value end
 end
 
-function db.open(file, text, indent)
+local function db_open(file, text, indent)
     local self = {}
 
     self.indent = indent or false
@@ -101,6 +112,7 @@ function db.open(file, text, indent)
 
     return self
 end
+db.open = db_open -- FIXME allow reopen ? there is no db:close() ; x = db.open(...) ; x:close() ; x.open(...) ?
 
 function db:setFile(file)
     self.file = file
@@ -111,11 +123,12 @@ function db:create(name, columns)
     self.data[name] = {}
     self.data[name].columns = {}
     self.data[name].defaults = {}
+    self.data[name].i = {}
 
     local i = 1
     for k, v in pairs(columns) do
         local field
-        local default = json.null
+        local default = nil --json.null
 
         if type(k) == 'number' then
             field = v
@@ -126,7 +139,7 @@ function db:create(name, columns)
 
         self.data[name].columns[i] = field
         self.data[name].defaults[i] = default
-        self.data[name][i] = {}
+        self.data[name].i[i] = {}
         i = i + 1
     end
 
@@ -142,18 +155,18 @@ end
 function db:insert(name, row)
     assert(self.data[name], "Table '" .. name .. "' does not exist")
 
-    local index = #self.data[name][1] + 1
+    local index = #self.data[name].i[1] + 1
 
     for i = 1, #self.data[name].columns do
-        local column = self.data[name][i]
+        local column = self.data[name].i[i]
         local value = row[i]
 
         if self.data[name].columns[i] == 'rowid' then
             if value == nil then
-                value = getUniqueID(self.data[name][i])
+                value = getUniqueID(self.data[name].i[i])
             elseif type(value) ~= 'number' then
                 error('rowid must be a number')
-            elseif self.data[name][i][value] then
+            elseif self.data[name].i[i][value] then
                 error('ID already exists')
             end
         end
@@ -238,7 +251,7 @@ function db:where(name, action)
     return coroutine.wrap(function() for i, v in pairs(results) do coroutine.yield(v, i) end end)
 end
 
--- Name - tables name or column nmae
+-- Name - tables name or column name
 -- NewName - Tables new name or table containing columns name with new name.
 function db:rename(name, newName)
     assert(self.data[name], "Table '" .. name .. "' does not exist")
@@ -300,4 +313,4 @@ function db:query(query)
     return self[command](self, unpack(args))
 end
 
-return { open = db.open }
+return { open = db_open }
