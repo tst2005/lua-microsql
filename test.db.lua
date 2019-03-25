@@ -88,6 +88,8 @@ local function queryTest()
 	player_db:query("INSERT INTO idTest VALUES ('Mr Frank')")
 	player_db:query("INSERT INTO idTest VALUES ('Mr Bob')")
 
+print(player_db)
+
 	player_db:query("DROP TABLE idTest")
 	assert(player_db:flush())
 	print(player_db)

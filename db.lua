@@ -1,6 +1,6 @@
 
 --local json = require 'dkjson'
-local json = require "lunajson-to-replace-dkjson"
+local json = require "replace-dkjson-by.lunajson"
 
 local Parser = require 'parser'
 
@@ -114,8 +114,6 @@ local function db_open(file, text, indent)
 end
 db.open = db_open -- FIXME allow reopen ? there is no db:close() ; x = db.open(...) ; x:close() ; x.open(...) ?
 
--- function db:close() end
-
 function db:flush()
 	--print("forced-flush called")
 	if self.file and self.changes and self.changes > 0 then
@@ -126,6 +124,17 @@ function db:flush()
 		self.changes = 0
 	end
 	return true
+end
+
+function db:save()
+	if not backendsave(self, nil) then
+		return false
+	end
+	return true
+end
+
+function db:close()
+	db:flush()
 end
 
 -- not used ?!
@@ -177,6 +186,25 @@ end
 local function getUniqueID(rows)
 	for i = 1, 10000000 do
 		if not contains(rows, i) then return i end
+	end
+end
+
+
+local getUniqueIDversion="v1"
+
+if getUniqueIDversion=="v2" then
+	io.stderr:write("Use getUniqueIDversion\t"..getUniqueIDversion.."\n")
+	function getUniqueID(rows)
+		local max = 10000000
+		local random = assert(math.random)
+		local rand = function() return random(1,max) end
+		for i = 1, 10000000 do
+			local id = rand()
+			if not contains(rows, i) then return i end
+			for i = 1, math.min(10, max-id) do -- FIXME max-id or max-id+1 ?
+				if not contains(rows, id+i) then return id+i end
+			end
+		end
 	end
 end
 

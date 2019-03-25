@@ -305,10 +305,12 @@ function Parser:parseInsertStatement()
 	local i = 1
 
 	while not self:getAtEndOfSouce() do
+print("self.currentToken.value", self.currentToken.value)
 		if self.currentToken.type ~= tokens.symbol then
 			if self.currentToken.type == tokens.int then
 				insert(row, tonumber(self.currentToken.value))
 			elseif self.currentToken.value ~= 'null' then
+print("row["..i.."]="..self.currentToken.value)
 				row[i] = self.currentToken.value
 			end
 			i = i + 1
